@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.23.0",
   "scripts": {
-    "wacli": "go run -tags sqlite_fts5 ./cmd/wacli",
+    "wacli": "bash -lc 'pnpm -s build >/dev/null && exec ./dist/wacli \"$@\"' _",
     "build": "mkdir -p dist && go build -tags sqlite_fts5 -o dist/wacli ./cmd/wacli",
     "start": "pnpm -s build && ./dist/wacli",
     "test": "pnpm -s test:go && pnpm -s test:fts",
