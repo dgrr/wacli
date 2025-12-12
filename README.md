@@ -38,29 +38,30 @@ Default store directory is `~/.wacli` (override with `--store DIR`).
 
 ```bash
 # 1) Authenticate (shows QR), then bootstrap sync
-./wacli auth
+pnpm wacli auth
+# or: ./dist/wacli auth (after pnpm build)
 
 # 2) Keep syncing (never shows QR; requires prior auth)
-./wacli sync
+pnpm wacli sync --follow
 
 # Diagnostics
-./wacli doctor
+pnpm wacli doctor
 
 # Search messages
-./wacli messages search "meeting"
+pnpm wacli messages search "meeting"
 
 # Download media for a message (after syncing)
 ./wacli media download --chat 1234567890@s.whatsapp.net --id <message-id>
 
 # Send a message
-./wacli send text --to 1234567890 --message "hello"
+pnpm wacli send text --to 1234567890 --message "hello"
 
 # Send a file
 ./wacli send file --to 1234567890 --file ./pic.jpg --caption "hi"
 
 # List groups and manage participants
-./wacli groups list
-./wacli groups rename --jid 123456789@g.us --name "New name"
+pnpm wacli groups list
+pnpm wacli groups rename --jid 123456789@g.us --name "New name"
 ```
 
 ## Prior Art / Credit
