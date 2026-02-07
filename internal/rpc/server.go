@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,8 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
+const unixSocketPrefix = "unix://"
+
 // WAClient defines the interface for WhatsApp operations.
 type WAClient interface {
 	IsConnected() bool
@@ -30,9 +33,11 @@ type WAClient interface {
 
 // Server is the HTTP RPC server.
 type Server struct {
-	addr string
-	db   *store.DB
-	wa   WAClient
+	addr       string
+	db         *store.DB
+	wa         WAClient
+	isUnixSock bool   // true if listening on Unix socket
+	sockPath   string // path to Unix socket file (if isUnixSock)
 
 	server *http.Server
 	mu     sync.RWMutex
@@ -91,7 +96,6 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/ping", s.handlePing)
 
 	s.server = &http.Server{
-		Addr:              s.addr,
 		Handler:           mux,
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -99,12 +103,28 @@ func (s *Server) Start() error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	ln, err := net.Listen("tcp", s.addr)
+	// Determine network type and address
+	network := "tcp"
+	listenAddr := s.addr
+
+	if strings.HasPrefix(s.addr, unixSocketPrefix) {
+		network = "unix"
+		s.sockPath = strings.TrimPrefix(s.addr, unixSocketPrefix)
+		listenAddr = s.sockPath
+		s.isUnixSock = true
+
+		// Remove existing socket file if it exists
+		if err := os.Remove(s.sockPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove existing socket %s: %w", s.sockPath, err)
+		}
+	}
+
+	ln, err := net.Listen(network, listenAddr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.addr, err)
 	}
 
-	s.log.Info().Str("addr", s.addr).Msg("RPC server starting")
+	s.log.Info().Str("addr", s.addr).Str("network", network).Msg("RPC server starting")
 	go func() {
 		if err := s.server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.log.Error().Err(err).Msg("RPC server error")
@@ -120,12 +140,31 @@ func (s *Server) Stop(ctx context.Context) error {
 		return nil
 	}
 	s.log.Info().Msg("RPC server stopping")
-	return s.server.Shutdown(ctx)
+	err := s.server.Shutdown(ctx)
+
+	// Clean up Unix socket file
+	if s.isUnixSock && s.sockPath != "" {
+		if rmErr := os.Remove(s.sockPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			s.log.Warn().Err(rmErr).Str("path", s.sockPath).Msg("failed to remove socket file")
+		}
+	}
+
+	return err
 }
 
 // Addr returns the listen address.
 func (s *Server) Addr() string {
 	return s.addr
+}
+
+// IsUnixSocket returns true if the server is listening on a Unix socket.
+func (s *Server) IsUnixSocket() bool {
+	return s.isUnixSock
+}
+
+// SocketPath returns the Unix socket path (empty string if using TCP).
+func (s *Server) SocketPath() string {
+	return s.sockPath
 }
 
 // --- Response helpers ---

@@ -79,7 +79,11 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 					defer cancel()
 					_ = rpcServer.Stop(shutdownCtx)
 				}()
-				fmt.Fprintf(os.Stderr, "RPC server listening on http://%s\n", rpcAddr)
+				if rpcServer.IsUnixSocket() {
+					fmt.Fprintf(os.Stderr, "RPC server listening on %s\n", rpcAddr)
+				} else {
+					fmt.Fprintf(os.Stderr, "RPC server listening on http://%s\n", rpcAddr)
+				}
 			}
 
 			// After connect callback to set WA client for RPC

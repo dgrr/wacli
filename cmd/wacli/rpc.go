@@ -85,7 +85,11 @@ Examples:
 				_ = rpcServer.Stop(shutdownCtx)
 			}()
 
-			fmt.Fprintf(os.Stderr, "RPC server listening on http://%s\n", addr)
+			if rpcServer.IsUnixSocket() {
+				fmt.Fprintf(os.Stderr, "RPC server listening on %s\n", addr)
+			} else {
+				fmt.Fprintf(os.Stderr, "RPC server listening on http://%s\n", addr)
+			}
 
 			// If sync is enabled, connect and run sync
 			if enableSync {
