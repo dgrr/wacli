@@ -111,8 +111,8 @@ func newMessagesListCmd(flags *rootFlags) *cobra.Command {
 
 	cmd.Flags().StringVar(&chat, "chat", "", "chat JID")
 	cmd.Flags().IntVar(&limit, "limit", 50, "limit results")
-	cmd.Flags().StringVar(&afterStr, "after", "", "only messages after time (RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
-	cmd.Flags().StringVar(&beforeStr, "before", "", "only messages before time (RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
+	cmd.Flags().StringVar(&afterStr, "after", "", "only messages after time (UTC: RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
+	cmd.Flags().StringVar(&beforeStr, "before", "", "only messages before time (UTC: RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
 	return cmd
 }
 
@@ -212,8 +212,8 @@ func newMessagesSearchCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&chat, "chat", "", "chat JID")
 	cmd.Flags().StringVar(&from, "from", "", "sender JID")
 	cmd.Flags().IntVar(&limit, "limit", 50, "limit results")
-	cmd.Flags().StringVar(&afterStr, "after", "", "only messages after time (RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
-	cmd.Flags().StringVar(&beforeStr, "before", "", "only messages before time (RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
+	cmd.Flags().StringVar(&afterStr, "after", "", "only messages after time (UTC: RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
+	cmd.Flags().StringVar(&beforeStr, "before", "", "only messages before time (UTC: RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)")
 	cmd.Flags().StringVar(&msgType, "type", "", "media type filter (image|video|audio|document)")
 	return cmd
 }
