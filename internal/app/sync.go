@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/steipete/wacli/internal/logging"
 	"github.com/steipete/wacli/internal/store"
 	"github.com/steipete/wacli/internal/wa"
 	"go.mau.fi/whatsmeow/types"
@@ -39,6 +40,9 @@ type SyncResult struct {
 }
 
 func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
+	log := logging.WithComponent("sync")
+	log.Debug().Str("mode", string(opts.Mode)).Msg("Sync starting")
+
 	if opts.Mode == "" {
 		opts.Mode = SyncModeFollow
 	}
@@ -47,6 +51,7 @@ func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
 	}
 
 	if err := a.OpenWA(); err != nil {
+		log.Error().Err(err).Msg("failed to open WA client")
 		return SyncResult{}, err
 	}
 
@@ -85,6 +90,11 @@ func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
 		switch v := evt.(type) {
 		case *events.Message:
 			pm := wa.ParseLiveMessage(v)
+			log.Debug().
+				Str("chat", pm.Chat.String()).
+				Str("id", pm.ID).
+				Bool("from_me", pm.FromMe).
+				Msg("received message")
 			if pm.ReactionToID != "" && pm.ReactionEmoji == "" && v.Message != nil && v.Message.GetEncReactionMessage() != nil {
 				if reaction, err := a.wa.DecryptReaction(ctx, v); err == nil && reaction != nil {
 					pm.ReactionEmoji = reaction.GetText()
@@ -97,6 +107,8 @@ func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
 			}
 			if err := a.storeParsedMessage(ctx, pm); err == nil {
 				messagesStored.Add(1)
+			} else {
+				log.Warn().Err(err).Str("id", pm.ID).Msg("failed to store message")
 			}
 			if opts.DownloadMedia && pm.Media != nil && pm.ID != "" {
 				enqueueMedia(pm.Chat.String(), pm.ID)
@@ -105,6 +117,7 @@ func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
 				fmt.Fprintf(os.Stderr, "\rSynced %d messages...", messagesStored.Load())
 			}
 		case *events.HistorySync:
+			log.Info().Int("conversations", len(v.Data.Conversations)).Msg("processing history sync")
 			fmt.Fprintf(os.Stderr, "\nProcessing history sync (%d conversations)...\n", len(v.Data.Conversations))
 			for _, conv := range v.Data.Conversations {
 				lastEvent.Store(time.Now().UTC().UnixNano())
@@ -131,8 +144,10 @@ func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
 			}
 			fmt.Fprintf(os.Stderr, "\rSynced %d messages...", messagesStored.Load())
 		case *events.Connected:
+			log.Info().Msg("connected to WhatsApp")
 			fmt.Fprintln(os.Stderr, "\nConnected.")
 		case *events.Disconnected:
+			log.Warn().Msg("disconnected from WhatsApp")
 			fmt.Fprintln(os.Stderr, "\nDisconnected.")
 			select {
 			case disconnected <- struct{}{}:
@@ -142,9 +157,12 @@ func (a *App) Sync(ctx context.Context, opts SyncOptions) (SyncResult, error) {
 	})
 	defer a.wa.RemoveEventHandler(handlerID)
 
+	log.Debug().Bool("allow_qr", opts.AllowQR).Msg("connecting to WhatsApp")
 	if err := a.Connect(ctx, opts.AllowQR, opts.OnQRCode); err != nil {
+		log.Error().Err(err).Msg("failed to connect")
 		return SyncResult{}, err
 	}
+	log.Debug().Msg("connected successfully")
 
 	if opts.DownloadMedia {
 		var err error

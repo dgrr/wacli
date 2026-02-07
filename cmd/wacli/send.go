@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/steipete/wacli/internal/logging"
 	"github.com/steipete/wacli/internal/out"
 	"github.com/steipete/wacli/internal/store"
 	"github.com/steipete/wacli/internal/wa"
@@ -30,6 +31,9 @@ func newSendTextCmd(flags *rootFlags) *cobra.Command {
 		Use:   "text",
 		Short: "Send a text message",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			log := logging.WithComponent("send")
+			log.Debug().Str("to", to).Int("msg_len", len(message)).Msg("send text command started")
+
 			if to == "" || message == "" {
 				return fmt.Errorf("--to and --message are required")
 			}
@@ -39,26 +43,36 @@ func newSendTextCmd(flags *rootFlags) *cobra.Command {
 
 			a, lk, err := newApp(ctx, flags, true, false)
 			if err != nil {
+				log.Error().Err(err).Msg("failed to create app")
 				return err
 			}
 			defer closeApp(a, lk)
 
 			if err := a.EnsureAuthed(); err != nil {
+				log.Error().Err(err).Msg("not authenticated")
 				return err
 			}
+
+			log.Debug().Msg("connecting to WhatsApp")
 			if err := a.Connect(ctx, false, nil); err != nil {
+				log.Error().Err(err).Msg("failed to connect")
 				return err
 			}
 
 			toJID, err := wa.ParseUserOrJID(to)
 			if err != nil {
+				log.Error().Err(err).Str("to", to).Msg("failed to parse recipient JID")
 				return err
 			}
 
+			log.Info().Str("to", toJID.String()).Msg("sending message")
 			msgID, err := a.WA().SendText(ctx, toJID, message)
 			if err != nil {
+				log.Error().Err(err).Str("to", toJID.String()).Msg("failed to send message")
 				return err
 			}
+
+			log.Info().Str("id", string(msgID)).Str("to", toJID.String()).Msg("message sent successfully")
 
 			now := time.Now().UTC()
 			chat := toJID

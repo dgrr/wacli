@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	appPkg "github.com/steipete/wacli/internal/app"
+	"github.com/steipete/wacli/internal/logging"
 	"github.com/steipete/wacli/internal/out"
 )
 
@@ -25,11 +26,19 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 		Use:   "sync",
 		Short: "Sync messages (requires prior auth; never shows QR)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			log := logging.WithComponent("sync")
+			log.Info().
+				Bool("once", once).
+				Bool("follow", follow).
+				Dur("idle_exit", idleExit).
+				Msg("starting sync command")
+
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
 			a, lk, err := newApp(ctx, flags, true, false)
 			if err != nil {
+				log.Error().Err(err).Msg("failed to create app")
 				return err
 			}
 			defer closeApp(a, lk)
@@ -47,6 +56,7 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 				mode = appPkg.SyncModeOnce
 			}
 
+			log.Debug().Str("mode", string(mode)).Msg("calling app.Sync")
 			res, err := a.Sync(ctx, appPkg.SyncOptions{
 				Mode:            mode,
 				AllowQR:         false,
@@ -56,8 +66,10 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 				IdleExit:        idleExit,
 			})
 			if err != nil {
+				log.Error().Err(err).Msg("sync failed")
 				return err
 			}
+			log.Info().Int64("messages_stored", res.MessagesStored).Msg("sync completed")
 
 			if flags.asJSON {
 				return out.WriteJSON(os.Stdout, map[string]any{

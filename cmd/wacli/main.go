@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/steipete/wacli/internal/logging"
 	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/store"
 	"google.golang.org/protobuf/proto"
@@ -11,9 +12,12 @@ import (
 
 func main() {
 	applyDeviceLabel()
+	logging.Debug().Strs("args", os.Args[1:]).Msg("wacli starting")
 	if err := execute(os.Args[1:]); err != nil {
+		logging.Error().Err(err).Msg("command failed")
 		os.Exit(1)
 	}
+	logging.Debug().Msg("wacli finished")
 }
 
 func applyDeviceLabel() {

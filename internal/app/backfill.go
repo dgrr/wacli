@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/steipete/wacli/internal/logging"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -37,6 +38,13 @@ type onDemandResponse struct {
 }
 
 func (a *App) BackfillHistory(ctx context.Context, opts BackfillOptions) (BackfillResult, error) {
+	log := logging.WithComponent("backfill")
+	log.Info().
+		Str("chat", opts.ChatJID).
+		Int("count", opts.Count).
+		Int("requests", opts.Requests).
+		Msg("starting backfill")
+
 	chatStr := strings.TrimSpace(opts.ChatJID)
 	if chatStr == "" {
 		return BackfillResult{}, fmt.Errorf("--chat is required")
@@ -136,8 +144,14 @@ func (a *App) BackfillHistory(ctx context.Context, opts BackfillOptions) (Backfi
 				mu.Unlock()
 
 				requestsSent++
+				log.Debug().
+					Int("request", i+1).
+					Int("total", opts.Requests).
+					Str("chat", chatStr).
+					Msg("requesting older messages")
 				fmt.Fprintf(os.Stderr, "Requesting %d older messages for %s...\n", opts.Count, chatStr)
 				if _, err := a.wa.RequestHistorySyncOnDemand(ctx, reqInfo, opts.Count); err != nil {
+					log.Error().Err(err).Msg("history sync request failed")
 					return err
 				}
 
@@ -157,6 +171,10 @@ func (a *App) BackfillHistory(ctx context.Context, opts BackfillOptions) (Backfi
 				}
 				mu.Unlock()
 
+				log.Debug().
+					Int("conversations", resp.conversations).
+					Int("messages", resp.messages).
+					Msg("received history sync response")
 				fmt.Fprintf(os.Stderr, "On-demand history sync: %d conversations, %d messages.\n", resp.conversations, resp.messages)
 
 				newOldest, err := a.db.GetOldestMessageInfo(chatStr)
@@ -181,12 +199,19 @@ func (a *App) BackfillHistory(ctx context.Context, opts BackfillOptions) (Backfi
 	}
 
 	afterCount, _ := a.db.CountMessages()
+	messagesAdded := afterCount - beforeCount
+
+	log.Info().
+		Int64("messages_added", messagesAdded).
+		Int("requests_sent", requestsSent).
+		Int("responses_seen", responsesSeen).
+		Msg("backfill complete")
 
 	return BackfillResult{
 		ChatJID:        chatStr,
 		RequestsSent:   requestsSent,
 		ResponsesSeen:  responsesSeen,
-		MessagesAdded:  afterCount - beforeCount,
+		MessagesAdded:  messagesAdded,
 		MessagesSynced: syncRes.MessagesStored,
 	}, nil
 }
