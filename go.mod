@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mdp/qrterminal/v3 v3.2.1
+	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
 	go.mau.fi/whatsmeow v0.0.0-20251205211405-fd6170ac96e5
 	golang.org/x/term v0.38.0
@@ -21,7 +22,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a // indirect
-	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.31 // indirect
 	go.mau.fi/libsignal v0.2.1 // indirect
