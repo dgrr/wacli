@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd service for wacli sync (personal account)
+  
+  SETUP:
+  1. Copy this file to ~/Library/LaunchAgents/
+  2. Update paths below if needed:
+     - Binary path (default: ~/.local/bin/wacli)
+     - Store path (default: ~/.wacli)
+     - Replace YOUR_USERNAME with your actual username
+  3. Load the service:
+     launchctl load ~/Library/LaunchAgents/com.wacli.sync.personal.plist
+  4. Start the service:
+     launchctl start com.wacli.sync.personal
+  
+  LOGS:
+  - stdout: ~/.wacli/sync.log
+  - stderr: ~/.wacli/sync.err
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wacli.sync.personal</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOUR_USERNAME/.local/bin/wacli</string>
+        <string>--store</string>
+        <string>/Users/YOUR_USERNAME/.wacli</string>
+        <string>sync</string>
+    </array>
+    
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <key>KeepAlive</key>
+    <false/>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/YOUR_USERNAME/.wacli/sync.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/YOUR_USERNAME/.wacli/sync.err</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/YOUR_USERNAME</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/Users/YOUR_USERNAME/.local/bin</string>
+    </dict>
+</dict>
+</plist>

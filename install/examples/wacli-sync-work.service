@@ -1,0 +1,32 @@
+# Linux systemd user service for wacli sync (work account)
+#
+# SETUP:
+# 1. Copy this file to ~/.config/systemd/user/
+# 2. Update paths below if needed:
+#    - Binary path (default: ~/.local/bin/wacli)
+#    - Store path (default: ~/.wacli-work)
+# 3. Reload systemd:
+#    systemctl --user daemon-reload
+# 4. Enable and start the service:
+#    systemctl --user enable wacli-sync-work.service
+#    systemctl --user start wacli-sync-work.service
+#
+# LOGS:
+# - stdout: ~/.wacli-work/sync.log
+# - stderr: ~/.wacli-work/sync.err
+# - journalctl: journalctl --user -u wacli-sync-work.service
+
+[Unit]
+Description=wacli WhatsApp Sync (work)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/wacli --store %h/.wacli-work sync
+Restart=always
+RestartSec=10
+StandardOutput=append:%h/.wacli-work/sync.log
+StandardError=append:%h/.wacli-work/sync.err
+
+[Install]
+WantedBy=default.target
