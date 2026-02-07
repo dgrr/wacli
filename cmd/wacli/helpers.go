@@ -21,10 +21,15 @@ func parseTime(s string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t, nil
 	}
-	if t, err := time.Parse("2006-01-02", s); err == nil {
+	// Full datetime: YYYY-MM-DD HH:MM:SS (local time)
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
 		return t, nil
 	}
-	return time.Time{}, fmt.Errorf("unsupported time format %q (use RFC3339 or YYYY-MM-DD)", s)
+	// Date only: YYYY-MM-DD (local time, midnight)
+	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("unsupported time format %q (use RFC3339, YYYY-MM-DD HH:MM:SS, or YYYY-MM-DD)", s)
 }
 
 func truncate(s string, max int) string {
