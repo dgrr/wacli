@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.wacli.sync.work</string>
+    <string>__SERVICE_LABEL__</string>
     
     <key>ProgramArguments</key>
     <array>
-        <string>{{BINARY_PATH}}</string>
+        <string>__BINARY_PATH__</string>
         <string>--store</string>
-        <string>{{STORE_PATH}}</string>
+        <string>__STORE_PATH__</string>
         <string>sync</string>
     </array>
     
@@ -20,17 +20,17 @@
     <false/>
     
     <key>StandardOutPath</key>
-    <string>{{HOME}}/.wacli-uae/sync.log</string>
+    <string>__STORE_PATH__/sync.log</string>
     
     <key>StandardErrorPath</key>
-    <string>{{HOME}}/.wacli-uae/sync.err</string>
+    <string>__STORE_PATH__/sync.err</string>
     
     <key>EnvironmentVariables</key>
     <dict>
         <key>HOME</key>
-        <string>{{HOME}}</string>
+        <string>__HOME__</string>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:{{HOME}}/.local/bin</string>
+        <string>/usr/local/bin:/usr/bin:/bin:__HOME__/.local/bin</string>
     </dict>
 </dict>
 </plist>

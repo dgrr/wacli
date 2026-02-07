@@ -1,29 +1,24 @@
 # wacli justfile - Build and service management
 
 # Default binary install location
-BINARY_DIR := env_var_or_default("BINARY_DIR", "~/.local/bin")
+BINARY_DIR := env_var_or_default("WACLI_BINARY_DIR", "~/.local/bin")
 BINARY_PATH := BINARY_DIR / "wacli"
 
-# Store paths (can be overridden via environment variables)
-PERSONAL_STORE := env_var_or_default("WACLI_PERSONAL_STORE", "~/.wacli")
-WORK_STORE := env_var_or_default("WACLI_WORK_STORE", "~/.wacli-uae")
+# Default store path (override with WACLI_STORE)
+DEFAULT_STORE := env_var_or_default("WACLI_STORE", "~/.wacli")
 
-# macOS plist paths
+# macOS paths
 LAUNCH_AGENTS := "~/Library/LaunchAgents"
-PLIST_PERSONAL := "com.wacli.sync.personal.plist"
-PLIST_WORK := "com.wacli.sync.work.plist"
 
 # Linux systemd paths
 SYSTEMD_USER := "~/.config/systemd/user"
-SERVICE_PERSONAL := "wacli-sync-personal.service"
-SERVICE_WORK := "wacli-sync-work.service"
 
 # Build wacli with sqlite_fts5 support
 build:
     @echo "Building wacli with sqlite_fts5..."
     CGO_ENABLED=1 go build -tags sqlite_fts5 -o wacli ./cmd/wacli
 
-# Install binary to ~/.local/bin (or BINARY_DIR)
+# Install binary to ~/.local/bin (or WACLI_BINARY_DIR)
 install: build
     @echo "Installing wacli to {{BINARY_DIR}}..."
     @mkdir -p {{BINARY_DIR}}
@@ -40,181 +35,165 @@ test:
 
 # ============ macOS Service Management ============
 
-# Install both macOS launchd services (personal + work)
-install-service-macos: _check-macos
-    @echo "Installing macOS launchd services..."
-    @mkdir -p {{LAUNCH_AGENTS}}
-    @mkdir -p {{PERSONAL_STORE}}
-    @mkdir -p {{WORK_STORE}}
-    @# Personal service
-    @sed -e "s|{{{{BINARY_PATH}}}}|$(eval echo {{BINARY_PATH}})|g" \
-         -e "s|{{{{STORE_PATH}}}}|$(eval echo {{PERSONAL_STORE}})|g" \
-         -e "s|{{{{HOME}}}}|$HOME|g" \
-         install/com.wacli.sync.personal.plist.template > "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}"
-    @echo "✓ Created {{PLIST_PERSONAL}}"
-    @# Work service
-    @sed -e "s|{{{{BINARY_PATH}}}}|$(eval echo {{BINARY_PATH}})|g" \
-         -e "s|{{{{STORE_PATH}}}}|$(eval echo {{WORK_STORE}})|g" \
-         -e "s|{{{{HOME}}}}|$HOME|g" \
-         install/com.wacli.sync.work.plist.template > "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}"
-    @echo "✓ Created {{PLIST_WORK}}"
-    @echo ""
-    @echo "Services installed. Use 'just load-macos' to load them."
+# Install a macOS launchd service for a specific store
+# Usage: just install-service-macos [name] [store_path]
+# Example: just install-service-macos default ~/.wacli
+#          just install-service-macos work ~/.wacli-work
+install-service-macos name="default" store=DEFAULT_STORE: _check-macos
+    #!/usr/bin/env bash
+    set -euo pipefail
+    LABEL="com.wacli.sync.{{name}}"
+    PLIST_FILE="$LABEL.plist"
+    STORE_PATH="$(eval echo {{store}})"
+    BINARY="$(eval echo {{BINARY_PATH}})"
+    AGENTS_DIR="$(eval echo {{LAUNCH_AGENTS}})"
+    
+    echo "Installing macOS service '$LABEL'..."
+    mkdir -p "$AGENTS_DIR"
+    mkdir -p "$STORE_PATH"
+    
+    sed -e "s|__SERVICE_LABEL__|$LABEL|g" \
+        -e "s|__BINARY_PATH__|$BINARY|g" \
+        -e "s|__STORE_PATH__|$STORE_PATH|g" \
+        -e "s|__HOME__|$HOME|g" \
+        install/com.wacli.sync.plist.template > "$AGENTS_DIR/$PLIST_FILE"
+    
+    echo "✓ Created $PLIST_FILE"
+    echo "  Store: $STORE_PATH"
+    echo "  Logs:  $STORE_PATH/sync.log"
+    echo ""
+    echo "To load: launchctl load $AGENTS_DIR/$PLIST_FILE"
+    echo "To start: launchctl start $LABEL"
 
-# Load macOS services
-load-macos: _check-macos
-    @echo "Loading macOS services..."
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}" 2>/dev/null
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}" 2>/dev/null
-    launchctl load "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}"
-    launchctl load "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}"
-    @echo "✓ Services loaded"
+# Load a macOS service
+load-macos name="default": _check-macos
+    #!/usr/bin/env bash
+    LABEL="com.wacli.sync.{{name}}"
+    PLIST="$(eval echo {{LAUNCH_AGENTS}})/$LABEL.plist"
+    launchctl unload "$PLIST" 2>/dev/null || true
+    launchctl load "$PLIST"
+    echo "✓ Loaded $LABEL"
 
-# Unload macOS services
-unload-macos: _check-macos
-    @echo "Unloading macOS services..."
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}" 2>/dev/null
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}" 2>/dev/null
-    @echo "✓ Services unloaded"
+# Start a macOS service
+start-macos name="default": _check-macos
+    launchctl start "com.wacli.sync.{{name}}"
+    @echo "✓ Started com.wacli.sync.{{name}}"
 
-# Start macOS sync services
-start-macos: _check-macos
-    @echo "Starting macOS sync services..."
-    launchctl start com.wacli.sync.personal
-    launchctl start com.wacli.sync.work
-    @echo "✓ Services started"
+# Stop a macOS service
+stop-macos name="default": _check-macos
+    -launchctl stop "com.wacli.sync.{{name}}" 2>/dev/null
+    @echo "✓ Stopped com.wacli.sync.{{name}}"
 
-# Stop macOS sync services
-stop-macos: _check-macos
-    @echo "Stopping macOS sync services..."
-    -launchctl stop com.wacli.sync.personal 2>/dev/null
-    -launchctl stop com.wacli.sync.work 2>/dev/null
-    @echo "✓ Services stopped"
-
-# Restart macOS sync services (stop, unload, load, start)
-sync-macos: _check-macos
-    @echo "Restarting macOS sync services..."
-    -launchctl stop com.wacli.sync.personal 2>/dev/null
-    -launchctl stop com.wacli.sync.work 2>/dev/null
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}" 2>/dev/null
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}" 2>/dev/null
-    launchctl load "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}"
-    launchctl load "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}"
-    launchctl start com.wacli.sync.personal
-    launchctl start com.wacli.sync.work
-    @echo "✓ Services restarted"
+# Restart a macOS service (unload + load + start)
+restart-macos name="default": _check-macos
+    #!/usr/bin/env bash
+    LABEL="com.wacli.sync.{{name}}"
+    PLIST="$(eval echo {{LAUNCH_AGENTS}})/$LABEL.plist"
+    launchctl stop "$LABEL" 2>/dev/null || true
+    launchctl unload "$PLIST" 2>/dev/null || true
+    launchctl load "$PLIST"
+    launchctl start "$LABEL"
+    echo "✓ Restarted $LABEL"
 
 # Show macOS service status
-status-macos: _check-macos
-    @echo "=== macOS Service Status ==="
-    @echo "Personal:"
-    @launchctl list | grep com.wacli.sync.personal || echo "  Not loaded"
-    @echo "Work:"
-    @launchctl list | grep com.wacli.sync.work || echo "  Not loaded"
+status-macos name="default": _check-macos
+    @echo "=== Service: com.wacli.sync.{{name}} ==="
+    @launchctl list | grep "com.wacli.sync.{{name}}" || echo "Not loaded"
 
-# Uninstall macOS services
-uninstall-service-macos: _check-macos
-    @echo "Uninstalling macOS services..."
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}" 2>/dev/null
-    -launchctl unload "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}" 2>/dev/null
-    -rm -f "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_PERSONAL}}"
-    -rm -f "$(eval echo {{LAUNCH_AGENTS}})/{{PLIST_WORK}}"
-    @echo "✓ Services uninstalled"
+# List all wacli macOS services
+list-macos: _check-macos
+    @echo "=== wacli Services ==="
+    @launchctl list | grep com.wacli.sync || echo "No services found"
+
+# Uninstall a macOS service
+uninstall-service-macos name="default": _check-macos
+    #!/usr/bin/env bash
+    LABEL="com.wacli.sync.{{name}}"
+    PLIST="$(eval echo {{LAUNCH_AGENTS}})/$LABEL.plist"
+    launchctl stop "$LABEL" 2>/dev/null || true
+    launchctl unload "$PLIST" 2>/dev/null || true
+    rm -f "$PLIST"
+    echo "✓ Uninstalled $LABEL"
 
 # ============ Linux Service Management ============
 
-# Install both Linux systemd services (personal + work)
-install-service-linux: _check-linux
-    @echo "Installing Linux systemd services..."
-    @mkdir -p {{SYSTEMD_USER}}
-    @mkdir -p {{PERSONAL_STORE}}
-    @mkdir -p {{WORK_STORE}}
-    @# Personal service
-    @sed -e "s|{{{{BINARY_PATH}}}}|$(eval echo {{BINARY_PATH}})|g" \
-         -e "s|{{{{STORE_PATH}}}}|$(eval echo {{PERSONAL_STORE}})|g" \
-         -e "s|{{{{HOME}}}}|$HOME|g" \
-         install/wacli-sync-personal.service.template > "$(eval echo {{SYSTEMD_USER}})/{{SERVICE_PERSONAL}}"
-    @echo "✓ Created {{SERVICE_PERSONAL}}"
-    @# Work service
-    @sed -e "s|{{{{BINARY_PATH}}}}|$(eval echo {{BINARY_PATH}})|g" \
-         -e "s|{{{{STORE_PATH}}}}|$(eval echo {{WORK_STORE}})|g" \
-         -e "s|{{{{HOME}}}}|$HOME|g" \
-         install/wacli-sync-work.service.template > "$(eval echo {{SYSTEMD_USER}})/{{SERVICE_WORK}}"
-    @echo "✓ Created {{SERVICE_WORK}}"
-    @systemctl --user daemon-reload
-    @echo ""
-    @echo "Services installed. Use 'just enable-linux' to enable them."
+# Install a Linux systemd service for a specific store
+# Usage: just install-service-linux [name] [store_path]
+# Example: just install-service-linux default ~/.wacli
+#          just install-service-linux work ~/.wacli-work
+install-service-linux name="default" store=DEFAULT_STORE: _check-linux
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SERVICE_NAME="wacli-sync-{{name}}.service"
+    STORE_PATH="$(eval echo {{store}})"
+    BINARY="$(eval echo {{BINARY_PATH}})"
+    SYSTEMD_DIR="$(eval echo {{SYSTEMD_USER}})"
+    
+    echo "Installing Linux service '$SERVICE_NAME'..."
+    mkdir -p "$SYSTEMD_DIR"
+    mkdir -p "$STORE_PATH"
+    
+    sed -e "s|__INSTANCE_NAME__|{{name}}|g" \
+        -e "s|__BINARY_PATH__|$BINARY|g" \
+        -e "s|__STORE_PATH__|$STORE_PATH|g" \
+        -e "s|__HOME__|$HOME|g" \
+        install/wacli-sync.service.template > "$SYSTEMD_DIR/$SERVICE_NAME"
+    
+    systemctl --user daemon-reload
+    echo "✓ Created $SERVICE_NAME"
+    echo "  Store: $STORE_PATH"
+    echo "  Logs:  $STORE_PATH/sync.log"
+    echo ""
+    echo "To enable: systemctl --user enable $SERVICE_NAME"
+    echo "To start:  systemctl --user start $SERVICE_NAME"
 
-# Enable and start Linux services
-enable-linux: _check-linux
-    @echo "Enabling Linux services..."
-    systemctl --user enable {{SERVICE_PERSONAL}}
-    systemctl --user enable {{SERVICE_WORK}}
-    systemctl --user start {{SERVICE_PERSONAL}}
-    systemctl --user start {{SERVICE_WORK}}
-    @echo "✓ Services enabled and started"
+# Enable and start a Linux service
+enable-linux name="default": _check-linux
+    systemctl --user enable "wacli-sync-{{name}}.service"
+    systemctl --user start "wacli-sync-{{name}}.service"
+    @echo "✓ Enabled and started wacli-sync-{{name}}.service"
 
-# Start Linux sync services
-start-linux: _check-linux
-    @echo "Starting Linux sync services..."
-    systemctl --user start {{SERVICE_PERSONAL}}
-    systemctl --user start {{SERVICE_WORK}}
-    @echo "✓ Services started"
+# Start a Linux service
+start-linux name="default": _check-linux
+    systemctl --user start "wacli-sync-{{name}}.service"
+    @echo "✓ Started wacli-sync-{{name}}.service"
 
-# Stop Linux sync services
-stop-linux: _check-linux
-    @echo "Stopping Linux sync services..."
-    -systemctl --user stop {{SERVICE_PERSONAL}} 2>/dev/null
-    -systemctl --user stop {{SERVICE_WORK}} 2>/dev/null
-    @echo "✓ Services stopped"
+# Stop a Linux service
+stop-linux name="default": _check-linux
+    -systemctl --user stop "wacli-sync-{{name}}.service" 2>/dev/null
+    @echo "✓ Stopped wacli-sync-{{name}}.service"
 
-# Restart Linux sync services
-sync-linux: _check-linux
-    @echo "Restarting Linux sync services..."
-    systemctl --user restart {{SERVICE_PERSONAL}}
-    systemctl --user restart {{SERVICE_WORK}}
-    @echo "✓ Services restarted"
+# Restart a Linux service
+restart-linux name="default": _check-linux
+    systemctl --user restart "wacli-sync-{{name}}.service"
+    @echo "✓ Restarted wacli-sync-{{name}}.service"
 
 # Show Linux service status
-status-linux: _check-linux
-    @echo "=== Linux Service Status ==="
-    @echo "Personal:"
-    @systemctl --user status {{SERVICE_PERSONAL}} --no-pager || true
-    @echo ""
-    @echo "Work:"
-    @systemctl --user status {{SERVICE_WORK}} --no-pager || true
+status-linux name="default": _check-linux
+    @systemctl --user status "wacli-sync-{{name}}.service" --no-pager || true
 
-# Uninstall Linux services
-uninstall-service-linux: _check-linux
-    @echo "Uninstalling Linux services..."
-    -systemctl --user stop {{SERVICE_PERSONAL}} 2>/dev/null
-    -systemctl --user stop {{SERVICE_WORK}} 2>/dev/null
-    -systemctl --user disable {{SERVICE_PERSONAL}} 2>/dev/null
-    -systemctl --user disable {{SERVICE_WORK}} 2>/dev/null
-    -rm -f "$(eval echo {{SYSTEMD_USER}})/{{SERVICE_PERSONAL}}"
-    -rm -f "$(eval echo {{SYSTEMD_USER}})/{{SERVICE_WORK}}"
-    @systemctl --user daemon-reload
-    @echo "✓ Services uninstalled"
+# List all wacli Linux services
+list-linux: _check-linux
+    @echo "=== wacli Services ==="
+    @systemctl --user list-units 'wacli-sync-*.service' --no-pager || echo "No services found"
+
+# Uninstall a Linux service
+uninstall-service-linux name="default": _check-linux
+    #!/usr/bin/env bash
+    SERVICE_NAME="wacli-sync-{{name}}.service"
+    SYSTEMD_DIR="$(eval echo {{SYSTEMD_USER}})"
+    systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "$SYSTEMD_DIR/$SERVICE_NAME"
+    systemctl --user daemon-reload
+    echo "✓ Uninstalled $SERVICE_NAME"
 
 # ============ Cross-platform Helpers ============
 
-# Uninstall services (auto-detects OS)
-uninstall-service:
-    #!/usr/bin/env sh
-    if [ "$(uname)" = "Darwin" ]; then
-        just uninstall-service-macos
-    else
-        just uninstall-service-linux
-    fi
-
-# Show logs (auto-detects OS, shows personal by default)
-logs account="personal":
-    #!/usr/bin/env sh
-    if [ "{{account}}" = "personal" ]; then
-        STORE="$(eval echo {{PERSONAL_STORE}})"
-    else
-        STORE="$(eval echo {{WORK_STORE}})"
-    fi
+# Show logs for a service
+logs name="default" store=DEFAULT_STORE:
+    #!/usr/bin/env bash
+    STORE="$(eval echo {{store}})"
     echo "=== Sync Log ($STORE/sync.log) ==="
     tail -50 "$STORE/sync.log" 2>/dev/null || echo "No log file yet"
     echo ""
@@ -222,13 +201,9 @@ logs account="personal":
     tail -20 "$STORE/sync.err" 2>/dev/null || echo "No error file yet"
 
 # Follow logs in real-time
-logs-follow account="personal":
-    #!/usr/bin/env sh
-    if [ "{{account}}" = "personal" ]; then
-        STORE="$(eval echo {{PERSONAL_STORE}})"
-    else
-        STORE="$(eval echo {{WORK_STORE}})"
-    fi
+logs-follow name="default" store=DEFAULT_STORE:
+    #!/usr/bin/env bash
+    STORE="$(eval echo {{store}})"
     tail -f "$STORE/sync.log" "$STORE/sync.err"
 
 # ============ Internal Helpers ============
